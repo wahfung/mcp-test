@@ -1,0 +1,48 @@
+name: Auto Reply to Pull Requests
+
+on:
+  pull_request_target:
+    types: [opened]
+
+jobs:
+  auto-reply:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Auto Reply to PR
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { owner, repo, number } = context.issue;
+            
+            // Get PR details
+            const { data: pullRequest } = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: number
+            });
+            
+            const authorLogin = pullRequest.user.login;
+            
+            // Create personalized comment
+            const comment = `感谢您的贡献 @${authorLogin}! 🎉
+            
+            我们已收到您的PR，并将尽快进行审核。在此期间，请确保：
+            
+            - ✅ 所有测试都已通过
+            - 📝 代码符合项目的代码规范
+            - 📚 必要的文档已更新
+            
+            如有任何问题，请在PR中留言。
+            
+            谢谢您对本项目的贡献！`;
+            
+            // Post comment
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: number,
+              body: comment
+            });
