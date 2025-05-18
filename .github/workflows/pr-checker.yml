@@ -1,0 +1,110 @@
+name: PR Labeler and Checker
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  process-pr:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
+      contents: read
+    steps:
+      - name: Check PR Size and Label
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { owner, repo, number } = context.issue;
+            
+            // Get PR details
+            const { data: pullRequest } = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: number
+            });
+            
+            // Get PR files
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner,
+              repo,
+              pull_number: number
+            });
+            
+            // Calculate total changes
+            const totalChanges = files.reduce((sum, file) => sum + file.changes, 0);
+            const filesChanged = files.length;
+            
+            // Create labels based on file types
+            const labels = [];
+            const fileTypes = new Set();
+            
+            files.forEach(file => {
+              const extension = file.filename.split('.').pop().toLowerCase();
+              fileTypes.add(extension);
+              
+              if (['js', 'jsx', 'ts', 'tsx'].includes(extension)) labels.push('javascript');
+              if (['css', 'scss', 'less'].includes(extension)) labels.push('css');
+              if (['html', 'htm'].includes(extension)) labels.push('html');
+              if (['md', 'txt'].includes(extension)) labels.push('documentation');
+              if (['json', 'yaml', 'yml'].includes(extension)) labels.push('config');
+              if (file.filename.includes('test') || file.filename.includes('spec')) labels.push('test');
+            });
+            
+            // PR size labels
+            if (totalChanges < 50) labels.push('size/xs');
+            else if (totalChanges < 200) labels.push('size/small');
+            else if (totalChanges < 500) labels.push('size/medium');
+            else if (totalChanges < 1000) labels.push('size/large');
+            else labels.push('size/xl');
+            
+            // Add more context-aware labels
+            if (pullRequest.title.toLowerCase().includes('fix') || pullRequest.body.toLowerCase().includes('fix:')) labels.push('bug-fix');
+            if (pullRequest.title.toLowerCase().includes('feature') || pullRequest.body.toLowerCase().includes('feature:')) labels.push('enhancement');
+            if (pullRequest.draft) labels.push('work-in-progress');
+            
+            // Add unique labels
+            const uniqueLabels = [...new Set(labels)];
+            
+            // Apply labels
+            await github.rest.issues.addLabels({
+              owner,
+              repo,
+              issue_number: number,
+              labels: uniqueLabels
+            });
+            
+            // Add PR analysis comment
+            let comment = `### PR 分析报告 📊\n\n`;
+            comment += `- 文件变更数量: **${filesChanged}**\n`;
+            comment += `- 代码变更行数: **${totalChanges}**\n`;
+            comment += `- 文件类型: **${Array.from(fileTypes).join(', ')}**\n\n`;
+            
+            // Size analysis
+            let sizeComment = '';
+            if (totalChanges > 500) {
+              sizeComment = '⚠️ 这是一个较大的PR，建议考虑拆分为多个小型PR以便于审核。';
+            } else if (totalChanges < 50) {
+              sizeComment = '✅ 这是一个小型PR，审核应该会很快完成。';
+            } else {
+              sizeComment = '✅ 这是一个中等大小的PR，易于审核。';
+            }
+            
+            comment += `#### 大小评估\n${sizeComment}\n\n`;
+            
+            // Add automated checks section
+            comment += `#### 自动检查\n`;
+            comment += `- [ ] 通过所有测试\n`;
+            comment += `- [ ] 符合代码规范\n`;
+            comment += `- [ ] 完成代码审核\n\n`;
+            
+            comment += `*这是一个自动生成的评估，由PR自动分析工具提供*`;
+            
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: number,
+              body: comment
+            });
