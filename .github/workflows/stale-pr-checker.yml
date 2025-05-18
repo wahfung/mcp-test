@@ -1,0 +1,33 @@
+name: Stale PR Checker
+
+on:
+  schedule:
+    - cron: '0 1 * * *'  # 每天凌晨1点运行
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Handle stale PRs
+        uses: actions/stale@v8
+        with:
+          # PR相关配置
+          stale-pr-message: '此Pull Request已经30天没有活动，被标记为过期。如需继续处理，请添加评论或进行更新，否则将在7天后自动关闭。'
+          close-pr-message: '由于长时间没有活动，此Pull Request已自动关闭。如需重新打开，请添加新评论。'
+          days-before-pr-stale: 30
+          days-before-pr-close: 7
+          stale-pr-label: '过期'
+          exempt-pr-labels: '长期开发,不要关闭'
+          
+          # 评论相关配置
+          operations-per-run: 100
+          ascending: true
+          remove-stale-when-updated: true
+          
+          # 可选：是否处理issue
+          days-before-issue-stale: -1  # 负数表示不处理issue
+          days-before-issue-close: -1
